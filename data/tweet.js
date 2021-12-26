@@ -1,51 +1,96 @@
-import { db } from '../db/database.js';
+import { sequelize } from '../db/database.js';
+import SQ from 'sequelize';
+import { User } from './auth.js';
 
-// FROM, JOIN => tweets과 JOIN한 users에서 가지고 오고, tweets과 users를 줄여서 tw와 us로 부를 것 이다.
-// SELECT => 그 중 tw의 id, text, createAt, userId와 tw의 username, name, url을 가지고 온다.
-// ON => tw에 있는 userId가 us에 있는 id와 같을때
-// ORDER BY => tw의 createAt을 기준으로 거꾸로(DESC) 정렬하겠다
-// 재사용을 위해 변수에 넣어준다
-const SELECT_JOIN =
-	'SELECT tw.id, tw.text, tw.createAt, tw.userId, us.username, us.name, us.url FROM tweets as tw JOIN users as us ON tw.userId=us.id';
-const ORDER_DESC = 'ORDER BY tw.createAt DESC';
+// sequelize 안에 있는 DataTypes를 받아온다
+const DataTypes = SQ.DataTypes;
+const Sequelize = SQ.Sequelize;
+
+// sequelize의 define을 이용해 우리가 만든 tweet의 스키마 연결
+const Tweet = sequelize.define('tweet', {
+	id: {
+		type: DataTypes.INTEGER,
+		autoIncrement: true,
+		allowNull: false,
+		primaryKey: true,
+	},
+	text: {
+		type: DataTypes.TEXT,
+		allowNull: false,
+	},
+});
+// Tweet은 User에 전속(포함)된다 => tweet과 user를 이어준다
+Tweet.belongsTo(User);
+
+const INCLUDE_USER = {
+	attributes: [
+		'id',
+		'text',
+		'createdAt',
+		'userId',
+		// sequelize의 colum속에 있는 user의 name을 가지고 와서 name으로 넣어준다
+		[Sequelize.col('user.name'), 'name'], // 'name' 자리에 데이터 이름을 정해서 넣으면 중첩으로 											들어가지 않는다
+		[Sequelize.col('user.username'), 'username'],
+		[Sequelize.col('user.url'), 'url'],
+	],
+	include: {
+		model: User,
+		attributes: [],
+	},
+};
+
+const ORDER_DESC = {
+	// data array 안의 순서 => createdAt을 기준으로 DESC(거꾸로) 정렬
+	order: [['createdAt', 'DESC']],
+};
 
 export async function getAll() {
-	return db
-		.execute(`${SELECT_JOIN} ${ORDER_DESC}`, null) //
-		.then((result) => result[0]);
+	// 변수에 정의된 내용 그대로 가져다쓰기
+	return Tweet.findAll({ ...INCLUDE_USER, ...ORDER_DESC });
 }
 
 export async function getAllByUsername(username) {
-	return db
-		.execute(`${SELECT_JOIN} WHERE username=? ${ORDER_DESC}`, [username])
-		.then((result) => result[0]);
+	// 변수에 정의된 내용 + include속성에 where(조건) 추가
+	return Tweet.findAll({
+		...INCLUDE_USER,
+		...ORDER_DESC,
+		include: {
+			...INCLUDE_USER.include,
+			where: { username },
+		},
+	});
 }
 
 export async function getById(id) {
-	return db
-		.execute(`${SELECT_JOIN} WHERE tw.id=?`, [id])
-		.then((result) => result[0][0]);
+	return Tweet.findOne({
+		where: { id },
+		...INCLUDE_USER,
+	});
 }
 
 export async function create(text, userId) {
-	return db
-		.execute('INSERT INTO tweets (text, createAt, userId) VALUES(?,?,?)', [
-			text,
-			new Date(),
-			userId,
-		])
-		.then((result) => getById(result[0].insertId));
+	// text와 userId로 tweet을 만들고,
+	// 만들어진 tweet의 id를 이용해 해당 tweet의 정보를 가지고 온다
+	return Tweet.create({ text, userId }).then((data) => {
+		this.getById(data.dataValues.id);
+	});
 }
 
 export async function update(id, text) {
-	return (
-		db
-			// SET => update할 새로운 데이터
-			.execute('UPDATE tweets SET text=? WHERE id=?', [text, id])
-			.then(() => getById(id))
-	);
+	// primary key로 id를 이용해 찾은 뒤,
+	// INCLUDE_USER 형식으로 데이터를 받아온다
+	return Tweet.findByPk(id, INCLUDE_USER).then((tweet) => {
+		// 받아온 데이터(tweet)의 text를 새로운 text로 바꿔준뒤
+		tweet.text = text;
+		// 그대로 db에 저장(update) 해준다
+		return tweet.save();
+	});
 }
 
 export async function remove(id) {
-	return db.execute('DELETE FROM tweets WHERE id=?', [id]);
+	// primary key로 id를 이용해 찾은 뒤, 데이터를 받아온다
+	return Tweet.findByPk(id).then((tweet) => {
+		// 해당 데이터(data)를 삭제(destroy) 해준다
+		tweet.destroy();
+	});
 }

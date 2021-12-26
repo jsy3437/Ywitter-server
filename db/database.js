@@ -1,13 +1,9 @@
 import { config } from '../config.js';
-import mysql from 'mysql2';
+import SQ from 'sequelize';
 
-// 데이터베이스를 관리하는 pool을 만든다, createPool을 이용해 mysql접속
-const pool = mysql.createPool({
-	host: config.db.host, // 호스트 주소
-	user: config.db.user, // 사용자의 이름
-	database: config.db.database, // 데이터베이스 이름
-	password: config.db.password, // 설정한 비밀번호
+const { host, user, database, password } = config.db;
+export const sequelize = new SQ.Sequelize(database, user, password, {
+	host,
+	dialect: 'mysql', // 기본값이 mysql이라 생략이 가능하지만 명시해줌
+	logging: false, // logging을 false로 주면 데이터베이스 실행한 정보가 log로 남지 않는다
 });
-
-//  pool에 있는 promise를 이용해 비동기로 내보낸다
-export const db = pool.promise();
