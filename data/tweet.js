@@ -1,51 +1,103 @@
 import { db } from '../db/database.js';
+import { getTweets } from '../database/database.js';
+import MongoDb from 'mongodb';
+import * as userRepository from './auth.js';
 
-// FROM, JOIN => tweets과 JOIN한 users에서 가지고 오고, tweets과 users를 줄여서 tw와 us로 부를 것 이다.
-// SELECT => 그 중 tw의 id, text, createAt, userId와 tw의 username, name, url을 가지고 온다.
-// ON => tw에 있는 userId가 us에 있는 id와 같을때
-// ORDER BY => tw의 createAt을 기준으로 거꾸로(DESC) 정렬하겠다
-// 재사용을 위해 변수에 넣어준다
-const SELECT_JOIN =
-	'SELECT tw.id, tw.text, tw.createAt, tw.userId, us.username, us.name, us.url FROM tweets as tw JOIN users as us ON tw.userId=us.id';
-const ORDER_DESC = 'ORDER BY tw.createAt DESC';
+// NO SQL : 데이터의 관계보다는 정보의 중복으로
+// 모든 사용자가 트윗을 쿼리하는 횟수가 사용자의 정보를 업데이트하는 횟수보다 많다
+// 프로필DB 따로 사용자의 문서 DB 따로
+// 수평확징성이 좋다
+// 관계형 조인쿼리는 가능은 하지만 성능이 좋지 않다
+
+// SQL : 데이터의 관계형
+// 조인쿼리의 성능이 좋다
+// 데이터의 관계를 이용해 중복으로 저장 할 필요없이 연결해 사용한다
+
+const ObjectId = MongoDb.ObjectId;
 
 export async function getAll() {
-	return db
-		.execute(`${SELECT_JOIN} ${ORDER_DESC}`, null) //
-		.then((result) => result[0]);
+	return (
+		getTweets()
+			.find()
+			// 정렬 createAt 기준으로 나중에 만들어진 순서(거꾸로)
+			.sort({ createAt: -1 })
+			// 배열 형태로 변환
+			.toArray()
+			.then(mapTweets)
+	);
 }
 
 export async function getAllByUsername(username) {
-	return db
-		.execute(`${SELECT_JOIN} WHERE username=? ${ORDER_DESC}`, [username])
-		.then((result) => result[0]);
+	return (
+		getTweets()
+			.find({ username })
+			// 정렬 createAt 기준으로 나중에 만들어진 순서(거꾸로)
+			.sort({ createAt: -1 })
+			// 배열 형태로 변환
+			.toArray()
+			.then(mapTweets)
+	);
 }
 
 export async function getById(id) {
-	return db
-		.execute(`${SELECT_JOIN} WHERE tw.id=?`, [id])
-		.then((result) => result[0][0]);
+	// database에 만들어 놓은 getUsers 함수를 이용해 bd를 가지고 와서
+	return (
+		getTweets()
+			// findOne(하나의 doc을 찾아오는 내장함수)으로 username이 username인 doc을 찾아온다
+			.findOne({ _id: new ObjectId(id) })
+			.then(mapOptionalTweet)
+	);
 }
 
 export async function create(text, userId) {
-	return db
-		.execute('INSERT INTO tweets (text, createAt, userId) VALUES(?,?,?)', [
-			text,
-			new Date(),
-			userId,
-		])
-		.then((result) => getById(result[0].insertId));
+	// user의 정보도 같이 넣기 위해 userId 이용해 찾은 데이터들을 변수에 담는다
+	const { name, username, url } = await userRepository.findById(userId);
+
+	// user에서 찾은 데이터와 새로운 text, createAt들을 넣어 tweet 쿼리를 만든다
+	const tweet = {
+		text,
+		createdAt: new Date(),
+		userId,
+		name,
+		username,
+		url,
+	};
+
+	return getTweets()
+		.insertOne(tweet)
+		.then((data) => mapOptionalTweet({ ...tweet, _id: data.insertedId }));
 }
 
 export async function update(id, text) {
+	// findOne은 아무것도 리턴하지 않게때문에 findOneAndUpdate를 사용
 	return (
-		db
-			// SET => update할 새로운 데이터
-			.execute('UPDATE tweets SET text=? WHERE id=?', [text, id])
-			.then(() => getById(id))
+		getTweets()
+			.findOneAndUpdate(
+				{ _id: new ObjectId(id) },
+				// $set => 업데이트
+				{ $set: { text } },
+				// returnDocument 옵션을 명시하지 않으면 업데이트 전상태의 데이터를 리턴하므로,
+				// 업데이트 후의 데이터를 원하면 꼭 after를 명시해주어야한다
+				{ returnDocument: 'after' }
+			)
+			// result 속의 value에 결과값이 들어있다
+			.then((result) => result.value)
+			// id가 포함 될 수 있게 만들어 준다
+			.then(mapOptionalTweet)
 	);
 }
 
 export async function remove(id) {
-	return db.execute('DELETE FROM tweets WHERE id=?', [id]);
+	// deleteOne => 삭제
+	return getTweets().deleteOne({ _id: new Object(id) });
+}
+
+function mapOptionalTweet(tweet) {
+	// tweet 요소를 받아서 id가 포함된 객체로 만들어 준다
+	return tweet ? { ...tweet, id: tweet._id.toString() } : tweet;
+}
+
+function mapTweets(tweets) {
+	// tweet 배열을 받아서 각 객체에 id가 포함된 배열로 만들어 준다
+	return tweets.map(mapOptionalTweet);
 }

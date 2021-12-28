@@ -7,6 +7,7 @@ import tweetsRouter from './router/tweets.js';
 import authRouter from './router/auth.js';
 import { config } from './config.js';
 import { initSocket } from './connection/socket.js';
+import { connectDB } from './database/database.js';
 // import { db } from './db/database.js';
 
 const app = express();
@@ -28,11 +29,18 @@ app.use((error, req, res, next) => {
 	res.sendStatus(500);
 });
 
+// connectDB 함수를 이용해 연결을 시켜준 뒤, 연결이 된다면 서버를 열어준다
+connectDB()
+	.then(() => {
+		const server = app.listen(config.host.port);
+		initSocket(server);
+	})
+	.catch(console.error);
+
 // app이 실행되기 전에 db에 먼저 연결해두어야 함
 // db.getConnection().then((connection) => console.log(connection)); // 연결된 db의 정보가 console로 찍힘
-
-const server = app.listen(config.host.port);
+// const server = app.listen(config.host.port);
 
 // 서버나 프론트에서 제일 처음 속한 파일의 만들어진 서버를 socket에 넣어
 // 새로운 socket server를 만들어준다
-initSocket(server);
+// initSocket(server);
