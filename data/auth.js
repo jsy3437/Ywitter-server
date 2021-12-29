@@ -1,38 +1,31 @@
-import { getUsers } from '../database/database.js';
-import MongoDb from 'mongodb';
+import { useVirtualId } from '../database/database.js';
+import Mongoose from 'mongoose';
 
-// mongodb에 id가 오브젝트 형식으로 저장 되어 있기 때문에
-// mongodb의 ObjectId를 받아와서 ObjectId 변수에 저장
-const ObjectId = MongoDb.ObjectId;
+// user의 스키마 작성
+const userSchema = new Mongoose.Schema({
+	username: { type: String, required: true },
+	name: { type: String, required: true },
+	email: { type: String, required: true },
+	password: { type: String, required: true },
+	url: String,
+});
+
+// _id를 id로 변환하는 함수
+useVirtualId(userSchema);
+
+// model
+const User = Mongoose.model('User', userSchema);
+
+// 가상의 id를 database에서 추가 해주었기 때문에 코드가 간단해진다
 
 export async function findByUsername(username) {
-	// database에 만들어 놓은 getUsers 함수를 이용해 bd를 가지고 와서
-	return (
-		getUsers()
-			// findOne(하나의 doc을 찾아오는 내장함수)으로 username이 username인 doc을 찾아온다
-			.findOne({ username })
-			.then(mapOptionalUser)
-	);
+	return User.findOne({ username });
 }
 
 export async function findById(id) {
-	// database에 만들어 놓은 getUsers 함수를 이용해 bd를 가지고 와서
-	return (
-		getUsers()
-			// findOne(하나의 doc을 찾아오는 내장함수)으로 username이 username인 doc을 찾아온다
-			.findOne({ _id: new ObjectId(id) })
-			.then(mapOptionalUser)
-	);
+	return User.findById(id);
 }
 
 export async function createUser(user) {
-	return getUsers()
-		.insertOne(user)
-		.then((data) => data.insertedId.toString());
-}
-
-// 찾은 유저가 있으면 유저의 _id를 새로운 id에 넣어서 반환
-// 찾은 유저가 없다면 비어있는 user(null) 반환
-function mapOptionalUser(user) {
-	return user ? { ...user, id: user._id.toString() } : user;
+	return new User(user).save().then((data) => data.id);
 }
