@@ -8,7 +8,8 @@ function required(key, defaultValue = undefined) {
 	}
 	return value;
 }
-
+//
+//
 export const config = {
 	jwt: {
 		secretKey: required('JWT_SECRET'),
