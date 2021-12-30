@@ -12,9 +12,14 @@ import { sequelize } from './db/database.js';
 
 const app = express();
 
+const corsOption = {
+	origin: config.cors.allowedOrigin,
+	optionsSuccessStatus: 200,
+};
+
 app.use(express.json());
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOption));
 app.use(morgan('tiny'));
 
 app.use('/tweets', tweetsRouter);
@@ -32,8 +37,9 @@ app.use((error, req, res, next) => {
 // sync => 데이터베이스에 연결해서 우리 모델과 우리 모델의 스키마가 데이터베이스 스키마가 존재하는지,
 // 			존재하지 않는다면 테이블을 새로 만들어주는 역할을 함
 sequelize.sync().then(() => {
+	console.log(`Server is started...${new Date()}`);
 	// sequelize에 연결이 잘 되었다면 서버를 실행한다
-	const server = app.listen(config.host.port);
+	const server = app.listen(config.port);
 	initSocket(server);
 });
 
