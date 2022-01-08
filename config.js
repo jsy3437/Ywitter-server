@@ -14,8 +14,7 @@ export const config = {
 		secretKey: required('JWT_SECRET'),
 		expiresInSec: parseInt(required('JWT_EXPIRES_SEC', 86400)),
 	},
-	//
-	//
+
 	bcrypt: {
 		saltRounds: parseInt(required('BCRYPT_SALT_ROUNDS', 12)),
 	},
@@ -26,5 +25,12 @@ export const config = {
 		user: required('DB_USER'),
 		database: required('DB_DATABASE'),
 		password: required('DB_PASSWORD'),
+	},
+	csrf: {
+		plainToken: required('CSRF_SECRET_KEY'),
+	},
+	rateLimit: {
+		windowMs: required('RATE_LIMIT_WINDOW_MS'), // ms기준 -> 1분
+		max: required('RATE_LIMIT_MAX'), // ip별 요청횟수 100제한
 	},
 };
